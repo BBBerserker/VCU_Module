@@ -1,15 +1,39 @@
 #include <Serial_CAN_Module_master.h>
+#include <SoftwareSerial.h>
 
 Serial_CAN can;
 
 #define can_tx 2
 #define can_rx 3
 
+/* 
+ * vehicle_speed_forward
+ * vehicle_speed_reverse
+ * sw_BPS
+ * key_status
+ * gear_value
+ * relay_main
+ * key_on
+ * (태완)
+ * 후진기어, 브레이크 페달
+ * (지섭)
+ * gear_value
+ * map_gear
+ * map_rpm
+ * rpm
+ * map_accel
+ * APS
+ * speed
+ * torque
+ */
+
 void setup() {
   // put your setup code here, to run once:
     Serial.begin(9600);
-    while (!Serial);
+    while (!Serial)
+      ;
     can.begin(can_tx, can_rx, 9600); // tx, rx
+    
     if (can.canRate(CAN_RATE_250)){
         Serial.println("set can rate ok");
     }
@@ -41,8 +65,8 @@ static int vcu_shiftpos = 2; // CAN 통신으로 bit값을 받아 int 값으로 
 
  
 // 필요 전역 변수들 ( 임의로 설정 )
-const int sw_acc = 3;
-const int sw_ig1 = 4;
+const int sw_acc = 7;
+const int sw_ig1 = 6;
 const int sw_start = 5;
 // off = o, ACC = a, IG1 = i, start = s
 static char key_status = 'o';
@@ -55,8 +79,9 @@ const int boozer = 11; // boozer PIN
 
 char gear_value; // 기어 값 
 
-int vehicle_speed_forward; // 전진 방향 속도
-int vehicle_speed_reverse; // 후진 방향 속도
+//int vehicle_speed_forward; // 전진 방향 속도
+//int vehicle_speed_reverse; // 후진 방향 속도
+int vehicle_speed; // 속도
 int sw_BPS; // Brake pedal Value
 
 void Key_Setup(){
@@ -80,7 +105,7 @@ void Gear_Setup(){
   pinMode(gear_drive, OUTPUT);
   pinMode(sw_BPS, OUTPUT); // BPS는 Gear에서 setup하지 않음 현재는 예제로 사용함
   pinMode(boozer, OUTPUT); 
-
+  
   // gear switch 초기화
   digitalWrite(gear_neutral, LOW); 
   digitalWrite(gear_reverse, LOW);
@@ -113,12 +138,14 @@ void Key_CAN_loop(){
 void Gear_CAN_loop(){
    /*  dta[0] = direction ==> 0 : neutral , 1 : forward , 2 : reverse 
        dta[1] = motot enable/disable ==> 0 : disable , 1 : enable  */
-   unsigned char dta[2] = {0x00, 0x00};
+   unsigned long id = 0x4d;
+   int dlc = 8;
+   unsigned char dta[8] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
    if( key_status == 's'){
      // Gear R 포지션 
-      if(digitalRead(gear_reverse) == HIGH && digitalRead(sw_BPS) == HIGH && vehicle_speed_forward < 3){
+      if(digitalRead(gear_reverse) == HIGH && digitalRead(sw_BPS) == HIGH && vehicle_speed < 3){
       // 모터 방향 후진 셋팅
-      warning_boozer(vehicle_speed_forward);
+      warning_boozer(vehicle_speed);
       Serial.println("Gear R");
       dta[0] = 0x02;
       dta[1] = 0x01;
@@ -130,27 +157,48 @@ void Gear_CAN_loop(){
       dta[1] = 0x01;
     } 
     // Gear D 포지션
-    else if(digitalRead(gear_drive) == HIGH && digitalRead(sw_BPS) == HIGH && vehicle_speed_reverse < 3){
+    else if(digitalRead(gear_drive) == HIGH && digitalRead(sw_BPS) == HIGH && vehicle_speed < 3){
       // 모터 방향 전진 셋팅
-      warning_boozer(vehicle_speed_reverse);
+      warning_boozer(vehicle_speed);
       Serial.println("Gear D");
       dta[0] = 0x01;
       dta[1] = 0x01;
      
     } // Gear P 포지션 
-    else if(digitalRead(sw_BPS) == HIGH && vehicle_speed_reverse < 3 && vehicle_speed_forward < 3){
+    else if(digitalRead(sw_BPS) == HIGH && vehicle_speed < 3){
       // 모터 토크 0 셋팅, MCU 모터방향 전환 확인
-      warning_boozer(vehicle_speed_forward);
-      warning_boozer(vehicle_speed_reverse);
+      warning_boozer(vehicle_speed);
       Serial.println("Gear P");
       dta[0] = 0x00;
       dta[1] = 0x00;
     }
   }
-  can.send(0x4d1, 0, 0, 2, dta);
+  can.send(id, 0, 0, dlc, dta);
+//  for(int i=0; i<8; i++)
+//        {
+//            Serial.print("0x");
+//            Serial.print(dta[i], HEX);
+//            Serial.print('\t');
+//        }
+
   delay(100);
   return;
 }
+
+//void can_loop(){
+//  if(can.recv(&id, dta))
+//    {
+//        Serial.print("GET DATA FROM ID: ");
+//        Serial.println(id);
+//        for(int i=0; i<8; i++)
+//        {
+//            Serial.print("0x");
+//            Serial.print(dta[i], HEX);
+//            Serial.print('\t');
+//        }
+//        Serial.println();
+//    }
+//}
 
 void key_off_to_acc(){
   key_status = 'a';
