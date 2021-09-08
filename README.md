@@ -1,6 +1,6 @@
 # VCU_Module
 
-- 자동차 속도 = speed km/h
+- 자동차 속도 = vehicle_speed km/h
 - BPS (digital) = BPS
 - key_status = key_on, key_off ( 1 ,0 )
 - 현재 기어 값 = gear
